@@ -17,6 +17,7 @@ datasets>=2.0.0
 
 # Persistence
 aiosqlite>=0.20.0
+langgraph-checkpoint-sqlite
 
 # Utilities
 python-dotenv>=1.0.0
