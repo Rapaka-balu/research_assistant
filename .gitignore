@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+env/
+*.sqlite3
+node_modules/
+dist/
+build/
+.pytest_cache/
+
+*.db
+*.db-shm
+*.db-wal
