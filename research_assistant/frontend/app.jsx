@@ -7,8 +7,12 @@ function App() {
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [activities, setActivities] = useState([]);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
     
     const messagesEndRef = useRef(null);
+    const inputRef = useRef(null);
+
+    const hasMessages = messages.length > 0 || isLoading;
 
     // Fetch all sessions on mount
     useEffect(() => {
@@ -19,6 +23,13 @@ function App() {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, activities]);
+
+    // Auto-focus input
+    useEffect(() => {
+        if (!isLoading && inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, [isLoading, hasMessages]);
 
     const fetchSessions = async () => {
         try {
@@ -121,7 +132,6 @@ function App() {
                         if (eventName === 'thread_id') {
                             if (!activeSession) {
                                 setActiveSession(dataStr);
-                                fetchSessions(); // Refresh list to show new session
                             }
                         } else if (eventName === 'update') {
                             const data = JSON.parse(dataStr);
@@ -130,8 +140,10 @@ function App() {
                         } else if (eventName === 'final_answer') {
                             const data = JSON.parse(dataStr);
                             setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
-                            tempActivities = []; // clear activities once we have answer
+                            tempActivities = [];
                             setActivities([]);
+                            // Refresh sessions to pick up the new session title
+                            fetchSessions();
                         } else if (eventName === 'error') {
                             const data = JSON.parse(dataStr);
                             setMessages(prev => [...prev, { role: 'assistant', content: `**Error:** ${data.error}` }]);
@@ -155,86 +167,185 @@ function App() {
         return { __html: marked.parse(text) };
     };
 
+    // Truncate session title for sidebar display
+    const truncateTitle = (title, maxLen = 36) => {
+        if (!title) return 'Untitled';
+        if (title.length <= maxLen) return title;
+        return title.substring(0, maxLen) + '…';
+    };
+
     return (
         <div className="app-container">
             {/* Sidebar */}
-            <div className="sidebar">
-                <h2>Research Sessions</h2>
+            <div className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
+                <div className="sidebar-header">
+                    <h2>Research Sessions</h2>
+                    <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            {sidebarOpen ? (
+                                <><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></>
+                            ) : (
+                                <><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></>
+                            )}
+                        </svg>
+                    </button>
+                </div>
                 <button className="new-chat-btn" onClick={startNewSession}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <line x1="12" y1="5" x2="12" y2="19"></line>
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
-                    New Research
+                    {sidebarOpen && 'New Research'}
                 </button>
                 
-                <div className="session-list">
-                    {sessions.map(id => (
-                        <div 
-                            key={id} 
-                            className={`session-item ${activeSession === id ? 'active' : ''}`}
-                            onClick={() => loadSession(id)}
-                        >
-                            <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{id}</span>
-                            <button className="delete-btn" onClick={(e) => deleteSession(e, id)}>✕</button>
-                        </div>
-                    ))}
-                </div>
+                {sidebarOpen && (
+                    <div className="session-list">
+                        {sessions.map(session => {
+                            const id = typeof session === 'string' ? session : session.thread_id;
+                            const title = typeof session === 'string' ? session : (session.title || session.thread_id);
+                            return (
+                                <div 
+                                    key={id} 
+                                    className={`session-item ${activeSession === id ? 'active' : ''}`}
+                                    onClick={() => loadSession(id)}
+                                    title={title}
+                                >
+                                    <div className="session-icon">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                        </svg>
+                                    </div>
+                                    <span className="session-title">{truncateTitle(title)}</span>
+                                    <button className="delete-btn" onClick={(e) => deleteSession(e, id)} title="Delete session">✕</button>
+                                </div>
+                            );
+                        })}
+                        {sessions.length === 0 && (
+                            <div className="no-sessions">No sessions yet</div>
+                        )}
+                    </div>
+                )}
             </div>
+
+            {/* Sidebar toggle for collapsed state */}
+            {!sidebarOpen && (
+                <button className="sidebar-expand-btn" onClick={() => setSidebarOpen(true)} title="Expand sidebar">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                </button>
+            )}
 
             {/* Main Chat */}
             <div className="main-chat">
-                <div className="chat-history">
-                    {messages.length === 0 && !isLoading && (
-                        <div className="empty-state">
-                            <h1>Research Assistant</h1>
-                            <p>Ask a complex question. The multi-agent system will search the web, summarize findings, and synthesize an answer.</p>
-                        </div>
-                    )}
-                    
-                    {messages.map((msg, i) => (
-                        <div key={i} className={`message ${msg.role}`}>
-                            <div className="message-role">{msg.role}</div>
-                            <div className="message-content" dangerouslySetInnerHTML={renderMarkdown(msg.content)} />
-                        </div>
-                    ))}
-                    
-                    {/* Activity Stream */}
-                    {activities.length > 0 && (
-                        <div className="message assistant">
-                            <div className="message-role">Agent Activity</div>
-                            <div className="agent-activity">
-                                {activities.map((act, i) => (
-                                    <div key={i} className="activity-item">
-                                        <span className="activity-agent">[{act.agent}]</span>
-                                        <span className="activity-status">{act.status}</span>
-                                    </div>
-                                ))}
+                {!hasMessages ? (
+                    /* ── Centered empty state with input ── */
+                    <div className="centered-state">
+                        <div className="hero-section">
+                            <div className="hero-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="url(#grad1)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <defs>
+                                        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style={{stopColor:'#3b82f6', stopOpacity:1}} />
+                                            <stop offset="100%" style={{stopColor:'#8b5cf6', stopOpacity:1}} />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
                             </div>
+                            <h1>Research Assistant</h1>
+                            <p>Ask any question. Our multi-agent system will search, summarize, analyze, and deliver a cited answer.</p>
                         </div>
-                    )}
-                    
-                    <div ref={messagesEndRef} />
-                </div>
+                        <form className="centered-input-container" onSubmit={handleSubmit}>
+                            <input 
+                                ref={inputRef}
+                                type="text" 
+                                className="chat-input"
+                                placeholder="What would you like to research?" 
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                disabled={isLoading}
+                                autoFocus
+                            />
+                            <button type="submit" className="send-btn" disabled={!inputValue.trim() || isLoading}>
+                                <svg className="send-icon" viewBox="0 0 24 24">
+                                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                </svg>
+                            </button>
+                        </form>
+                        <div className="suggestion-chips">
+                            <button className="chip" onClick={() => setInputValue('What are the latest breakthroughs in quantum computing?')}>
+                                🔬 Quantum computing breakthroughs
+                            </button>
+                            <button className="chip" onClick={() => setInputValue('Compare renewable energy sources for home use')}>
+                                ⚡ Renewable energy comparison
+                            </button>
+                            <button className="chip" onClick={() => setInputValue('Explain the economic impact of AI on the job market')}>
+                                🤖 AI's economic impact
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    /* ── Chat messages view ── */
+                    <>
+                        <div className="chat-history">
+                            {messages.map((msg, i) => (
+                                <div key={i} className={`message ${msg.role}`}>
+                                    <div className="message-role">
+                                        {msg.role === 'user' ? (
+                                            <><span className="role-icon">👤</span> You</>
+                                        ) : (
+                                            <><span className="role-icon">🔬</span> Research Assistant</>
+                                        )}
+                                    </div>
+                                    <div className="message-content" dangerouslySetInnerHTML={renderMarkdown(msg.content)} />
+                                </div>
+                            ))}
+                            
+                            {/* Activity Stream */}
+                            {activities.length > 0 && (
+                                <div className="message assistant">
+                                    <div className="message-role"><span className="role-icon">⚙️</span> Agent Activity</div>
+                                    <div className="agent-activity">
+                                        {activities.map((act, i) => (
+                                            <div key={i} className="activity-item">
+                                                <span className="activity-agent">{act.agent}</span>
+                                                <span className="activity-status">{act.status}</span>
+                                            </div>
+                                        ))}
+                                        <div className="activity-spinner">
+                                            <div className="spinner"></div>
+                                            <span>Working...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            <div ref={messagesEndRef} />
+                        </div>
 
-                {/* Input Form */}
-                <div className="input-area">
-                    <form className="input-container" onSubmit={handleSubmit}>
-                        <input 
-                            type="text" 
-                            className="chat-input"
-                            placeholder="Type your research query..." 
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            disabled={isLoading}
-                        />
-                        <button type="submit" className="send-btn" disabled={!inputValue.trim() || isLoading}>
-                            <svg className="send-icon" viewBox="0 0 24 24">
-                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                            </svg>
-                        </button>
-                    </form>
-                </div>
+                        {/* Bottom input when in chat mode */}
+                        <div className="input-area">
+                            <form className="input-container" onSubmit={handleSubmit}>
+                                <input 
+                                    ref={inputRef}
+                                    type="text" 
+                                    className="chat-input"
+                                    placeholder="Ask a follow-up question..." 
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    disabled={isLoading}
+                                />
+                                <button type="submit" className="send-btn" disabled={!inputValue.trim() || isLoading}>
+                                    <svg className="send-icon" viewBox="0 0 24 24">
+                                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                    </svg>
+                                </button>
+                            </form>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );

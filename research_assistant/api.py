@@ -51,8 +51,21 @@ class ChatRequest(BaseModel):
 
 @app.get("/api/sessions")
 def get_sessions():
-    """List all saved sessions."""
-    sessions = list_sessions(checkpointer)
+    """List all saved sessions with their first query as the title."""
+    session_ids = list_sessions(checkpointer)
+    sessions = []
+    for sid in session_ids:
+        title = sid  # fallback to session ID
+        try:
+            config = {"configurable": {"thread_id": sid}}
+            state = graph.get_state(config)
+            if state and hasattr(state, 'values') and state.values:
+                query = state.values.get("query", "")
+                if query:
+                    title = query
+        except Exception:
+            pass
+        sessions.append({"thread_id": sid, "title": title})
     return {"sessions": sessions}
 
 
